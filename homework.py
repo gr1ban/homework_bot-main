@@ -5,8 +5,8 @@ import time
 from http import HTTPStatus
 
 import requests
-import telegram
-from telegram.error import TelegramError
+import telebot
+from telebot.apihelper import ApiException
 from dotenv import load_dotenv
 
 from exceptions import TokensError, URLError, KeyError, HomeworkStatusError
@@ -101,14 +101,14 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug(SUCCESSFUL_SENDING_TEXT)
-    except TelegramError:
-        logging.error('Ошибка отправки сообщений')
+    except ApiException as e:
+        logging.error(f'Ошибка отправки сообщений: {e}')
 
 
 def main():
     """Основная логика работы бота."""
+    bot = telebot.TeleBot(TELEGRAM_TOKEN)
     check_tokens()
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     send_message(bot, GREETINGS_TEXT)
     start_error_message = ''
