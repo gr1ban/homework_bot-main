@@ -10,7 +10,7 @@ import telebot
 from telebot.apihelper import ApiException
 from dotenv import load_dotenv
 
-from exceptions import TokensError, URLError, KeyError, HomeworkStatusError
+from exceptions import TokensError, KeyError, HomeworkStatusError
 
 load_dotenv()
 
