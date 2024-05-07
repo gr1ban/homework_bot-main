@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from http import HTTPStatus
+from urllib.error import URLError
 
 import requests
 import telebot
@@ -34,14 +35,17 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-    source = ("PRACTICUM_TOKEN", "TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID")
+    source = ('PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID')
     token_list = [token for token in source if not globals()[token]]
     if token_list:
         text_error = (
-            f'Для дальнейшей работы программы Вам необходимо'
+            'Для дальнейшей работы программы Вам необходимо'
             f' предоставить следующие tokens: {" ".join(token_list)}'
         )
         logging.critical(text_error)
@@ -51,14 +55,19 @@ def check_tokens():
 def get_api_answer(timestamp):
     """Делает запрос к эндпоинту с параметрами указанными в timestamp."""
     params = {'from_date': timestamp}
-    logging.info(f'Производим запрос к {ENDPOINT} c params={params}')
+    logger.info(f'Производим запрос к {ENDPOINT} c params={params}')
+
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
         if response.status_code != HTTPStatus.OK:
+            logger.error(f'Эндпоинт - {ENDPOINT} недоступен')
             raise URLError(f'Эндпоинт - {ENDPOINT} недоступен')
-        logging.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
+
+        logger.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
         return response.json()
-    except requests.RequestException:
+    except requests.RequestException as e:
+        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}! Причина:
+                     {str(e)}')
         raise ConnectionError(f'Сбой запроса к {ENDPOINT} c params={params}!')
 
 
@@ -101,17 +110,20 @@ def send_message(bot, message):
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.debug(SUCCESSFUL_SENDING_TEXT)
+        return True  # Возвращаем True при успешной отправке
     except ApiException as e:
         logging.error(f'Ошибка отправки сообщений: {e}')
+        return False  # Возвращаем False, если возникла ошибка при отправке
 
 
 def main():
     """Основная логика работы бота."""
     bot = telebot.TeleBot(TELEGRAM_TOKEN)
-    check_tokens()
+    check_tokens()  # Убедитесь, что токены корректны
     timestamp = int(time.time())
     send_message(bot, GREETINGS_TEXT)
     start_error_message = ''
+
     while True:
         try:
             response = get_api_answer(timestamp)
@@ -120,14 +132,16 @@ def main():
                 logging.debug('Нет новых статусов у работ')
             else:
                 homework_status = parse_status(homework[0])
-                send_message(bot, homework_status)
-            timestamp = response['current_date']
+                message_sent = send_message(bot, homework_status)
+                if message_sent:
+                    timestamp = response['current_date']
+
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error(message, exc_info=True)
-            if start_error_message != message:
-                send_message(bot, message)
+            if send_message(bot, message) and start_error_message != message:
                 start_error_message = message
+
         finally:
             time.sleep(RETRY_PERIOD)
 
@@ -141,3 +155,4 @@ if __name__ == '__main__':
     )
     logging.StreamHandler(sys.stdout)
     main()
+
