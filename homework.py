@@ -66,8 +66,8 @@ def get_api_answer(timestamp):
         logger.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
         return response.json()
     except requests.RequestException as e:
-        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}!'
-                     'Причина: {str(e)}')
+        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}! Причина:'
+                     f'{str(e)}')
         raise ConnectionError(f'Сбой запроса к {ENDPOINT} c params={params}!')
 
 
