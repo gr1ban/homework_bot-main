@@ -37,6 +37,11 @@ HOMEWORK_VERDICTS = {
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+params = {'from_date': timestamp}
+request_message = f'Производим запрос к {ENDPOINT} с params={params}'
+error_message = f'Сбой запроса к {ENDPOINT} с params={params}!'
+error_unavailable = f'Эндпоинт - {ENDPOINT} недоступен'
+success_message = f'Запрос к {ENDPOINT} с params={params} успешен!'
 
 
 def check_tokens():
@@ -48,32 +53,32 @@ def check_tokens():
             'Для дальнейшей работы программы Вам необходимо'
             f' предоставить следующие tokens: {" ".join(token_list)}'
         )
-        logging.critical(text_error)
+        logger.critical(text_error)
         raise TokensError(text_error)
 
 
 def get_api_answer(timestamp):
-    """Делает запрос к эндпоинту с параметрами указанными в timestamp."""
-    params = {'from_date': timestamp}
+    """Делает запрос к эндпоинту с параметрами, указанными в timestamp."""
     logger.info(f'Производим запрос к {ENDPOINT} c params={params}')
 
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code != HTTPStatus.OK:
-            logger.error(f'Эндпоинт - {ENDPOINT} недоступен')
-            raise URLError(f'Эндпоинт - {ENDPOINT} недоступен')
 
-        logger.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
-        return response.json()
     except requests.RequestException as e:
-        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}! Причина:'
-                     f'{str(e)}')
-        raise ConnectionError(f'Сбой запроса к {ENDPOINT} c params={params}!')
+        logger.error(f'{error_message} Причина: {str(e)}')
+        raise ConnectionError(f'{error_message}')
+
+    if response.status_code != HTTPStatus.OK:
+        logger.error(error_unavailable)
+        raise URLError(error_unavailable)
+
+    logger.info(success_message)
+    return response.json()
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие ожидаемой структуре."""
-    logging.info('Начинаем проверку API-ответа сервера!')
+    logger.info('Начинаем проверку API-ответа сервера!')
     if not isinstance(response, dict):
         raise TypeError('API структура данных не соответствует заданной')
     if 'homeworks' not in response:
@@ -84,13 +89,13 @@ def check_response(response):
     if not isinstance(homeworks, list):
         raise TypeError('Полученная структура данных "homeworks" не '
                         'соответствует заданной')
-    logging.info('Проверку API-ответа сервера успешна!')
+    logger.info('Проверку API-ответа сервера успешна!')
     return homeworks
 
 
 def parse_status(homework):
     """Извлечение статуса домашней работы."""
-    logging.info('Начинаем проверку статуса домашней работы!')
+    logger.info('Начинаем проверку статуса домашней работы!')
     homework_name = homework.get('homework_name')
     if not homework_name:
         raise KeyError('Ключ "homework_name" отсутствует')
@@ -100,19 +105,19 @@ def parse_status(homework):
     verdict = HOMEWORK_VERDICTS.get(status)
     if not verdict:
         raise HomeworkStatusError('Неизвестный статус домашней работы')
-    logging.info('Проверка статуса домашней работы успешна!')
+    logger.info('Проверка статуса домашней работы успешна!')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def send_message(bot, message):
     """Отправка сообщения в Telegram чат."""
-    logging.info('Начинаем отправку сообщения!')
+    logger.info('Начинаем отправку сообщения!')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.debug(SUCCESSFUL_SENDING_TEXT)
+        logger.debug(SUCCESSFUL_SENDING_TEXT)
         return True  # Возвращаем True при успешной отправке
     except ApiException as e:
-        logging.error(f'Ошибка отправки сообщений: {e}')
+        logger.error(f'Ошибка отправки сообщений: {e}')
         return False  # Возвращаем False, если возникла ошибка при отправке
 
 
@@ -129,7 +134,7 @@ def main():
             response = get_api_answer(timestamp)
             homework = check_response(response)
             if not homework:
-                logging.debug('Нет новых статусов у работ')
+                logger.debug('Нет новых статусов у работ')
             else:
                 homework_status = parse_status(homework[0])
                 message_sent = send_message(bot, homework_status)
@@ -138,8 +143,8 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message, exc_info=True)
-            if send_message(bot, message) and start_error_message != message:
+            logger.error(message, exc_info=True)
+            if start_error_message != message and send_message(bot, message):
                 start_error_message = message
 
         finally:
@@ -147,11 +152,11 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.DEBUG,
+    logger.basicConfig(
+        level=logger.DEBUG,
         encoding='utf-8',
         format='%(asctime)s [%(levelname)s] [функция %(funcName)s '
                'стр.%(lineno)d] - %(message)s'
     )
-    logging.StreamHandler(sys.stdout)
+    logger.StreamHandler(sys.stdout)
     main()
