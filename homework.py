@@ -3,7 +3,6 @@ import os
 import sys
 import time
 from http import HTTPStatus
-from urllib.error import URLError
 
 import requests
 import telebot
@@ -37,11 +36,6 @@ HOMEWORK_VERDICTS = {
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-params = {'from_date': timestamp}
-request_message = f'Производим запрос к {ENDPOINT} с params={params}'
-error_message = f'Сбой запроса к {ENDPOINT} с params={params}!'
-error_unavailable = f'Эндпоинт - {ENDPOINT} недоступен'
-success_message = f'Запрос к {ENDPOINT} с params={params} успешен!'
 
 
 def check_tokens():
@@ -58,21 +52,24 @@ def check_tokens():
 
 
 def get_api_answer(timestamp):
-    """Делает запрос к эндпоинту с параметрами, указанными в timestamp."""
+    """Делает запрос к эндпоинту с параметрами указанными в timestamp."""
+    params = {'from_date': timestamp}
     logger.info(f'Производим запрос к {ENDPOINT} c params={params}')
 
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-
     except requests.RequestException as e:
-        logger.error(f'{error_message} Причина: {str(e)}')
-        raise ConnectionError(f'{error_message}')
+        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}!'
+                     f'Причина: {str(e)}')
+        raise ConnectionError(f'Сбой запроса к {ENDPOINT} c params={params}!')
 
     if response.status_code != HTTPStatus.OK:
-        logger.error(error_unavailable)
-        raise URLError(error_unavailable)
+        logger.error(f'Эндпоинт - {ENDPOINT} недоступен, '
+                     f'статус: {response.status_code}')
+        raise Exception(f'Эндпоинт - {ENDPOINT} недоступен, '
+                        f'статус: {response.status_code}')
 
-    logger.info(success_message)
+    logger.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
     return response.json()
 
 
@@ -105,19 +102,19 @@ def parse_status(homework):
     verdict = HOMEWORK_VERDICTS.get(status)
     if not verdict:
         raise HomeworkStatusError('Неизвестный статус домашней работы')
-    logger.info('Проверка статуса домашней работы успешна!')
+    logging.info('Проверка статуса домашней работы успешна!')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def send_message(bot, message):
     """Отправка сообщения в Telegram чат."""
-    logger.info('Начинаем отправку сообщения!')
+    logging.info('Начинаем отправку сообщения!')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logger.debug(SUCCESSFUL_SENDING_TEXT)
+        logging.debug(SUCCESSFUL_SENDING_TEXT)
         return True  # Возвращаем True при успешной отправке
     except ApiException as e:
-        logger.error(f'Ошибка отправки сообщений: {e}')
+        logging.error(f'Ошибка отправки сообщений: {e}')
         return False  # Возвращаем False, если возникла ошибка при отправке
 
 
@@ -134,7 +131,7 @@ def main():
             response = get_api_answer(timestamp)
             homework = check_response(response)
             if not homework:
-                logger.debug('Нет новых статусов у работ')
+                logging.debug('Нет новых статусов у работ')
             else:
                 homework_status = parse_status(homework[0])
                 message_sent = send_message(bot, homework_status)
@@ -143,7 +140,7 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logger.error(message, exc_info=True)
+            logging.error(message, exc_info=True)
             if start_error_message != message and send_message(bot, message):
                 start_error_message = message
 
@@ -152,11 +149,11 @@ def main():
 
 
 if __name__ == '__main__':
-    logger.basicConfig(
-        level=logger.DEBUG,
+    logging.basicConfig(
+        level=logging.DEBUG,
         encoding='utf-8',
         format='%(asctime)s [%(levelname)s] [функция %(funcName)s '
                'стр.%(lineno)d] - %(message)s'
     )
-    logger.StreamHandler(sys.stdout)
+    logging.StreamHandler(sys.stdout)
     main()
