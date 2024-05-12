@@ -28,6 +28,11 @@ GREETINGS_TEXT = (
 
 SUCCESSFUL_SENDING_TEXT = 'Сообщение успешно отправлено'
 
+REQUEST_MSG = 'Производим запрос к {endpoint} с params={params}'
+ERROR_REQ_MSG = 'Сбой запроса к {endpoint} с params={params}! Причина: {error}'
+UNAVAILABLE_ENDPOINT_MSG = 'Эндпоинт - {endpoint} недоступен, статус: {status}'
+SUCCESSFUL_REQUEST_MSG = 'Запрос к {endpoint} с params={params} успешен!'
+
 HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
@@ -54,22 +59,24 @@ def check_tokens():
 def get_api_answer(timestamp):
     """Делает запрос к эндпоинту с параметрами указанными в timestamp."""
     params = {'from_date': timestamp}
-    logger.info(f'Производим запрос к {ENDPOINT} c params={params}')
+    logger.info(REQUEST_MSG.format(endpoint=ENDPOINT, params=params))
 
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except requests.RequestException as e:
-        logger.error(f'Сбой запроса к {ENDPOINT} c params={params}!'
-                     f'Причина: {str(e)}')
-        raise ConnectionError(f'Сбой запроса к {ENDPOINT} c params={params}!')
+        error_message = ERROR_REQ_MSG.format(endpoint=ENDPOINT,
+                                             params=params, error=str(e))
+        logger.error(error_message)
+        raise ConnectionError(error_message)
 
     if response.status_code != HTTPStatus.OK:
-        logger.error(f'Эндпоинт - {ENDPOINT} недоступен, '
-                     f'статус: {response.status_code}')
-        raise Exception(f'Эндпоинт - {ENDPOINT} недоступен, '
-                        f'статус: {response.status_code}')
+        status_message = UNAVAILABLE_ENDPOINT_MSG.format(
+            endpoint=ENDPOINT, status=response.status_code)
+        logger.error(status_message)
+        raise Exception(status_message)
 
-    logger.info(f'Запрос к {ENDPOINT} c params={params} успешен!')
+    logger.info(SUCCESSFUL_REQUEST_MSG.format(endpoint=ENDPOINT,
+                                              params=params))
     return response.json()
 
 
@@ -102,19 +109,19 @@ def parse_status(homework):
     verdict = HOMEWORK_VERDICTS.get(status)
     if not verdict:
         raise HomeworkStatusError('Неизвестный статус домашней работы')
-    logging.info('Проверка статуса домашней работы успешна!')
+    logger.info('Проверка статуса домашней работы успешна!')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def send_message(bot, message):
     """Отправка сообщения в Telegram чат."""
-    logging.info('Начинаем отправку сообщения!')
+    logger.info('Начинаем отправку сообщения!')
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.debug(SUCCESSFUL_SENDING_TEXT)
+        logger.debug(SUCCESSFUL_SENDING_TEXT)
         return True  # Возвращаем True при успешной отправке
     except ApiException as e:
-        logging.error(f'Ошибка отправки сообщений: {e}')
+        logger.error(f'Ошибка отправки сообщений: {e}')
         return False  # Возвращаем False, если возникла ошибка при отправке
 
 
@@ -131,7 +138,7 @@ def main():
             response = get_api_answer(timestamp)
             homework = check_response(response)
             if not homework:
-                logging.debug('Нет новых статусов у работ')
+                logger.debug('Нет новых статусов у работ')
             else:
                 homework_status = parse_status(homework[0])
                 message_sent = send_message(bot, homework_status)
@@ -140,7 +147,7 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message, exc_info=True)
+            logger.error(message, exc_info=True)
             if start_error_message != message and send_message(bot, message):
                 start_error_message = message
 
